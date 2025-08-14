@@ -393,6 +393,136 @@ class CAManager:
         print(f"   Private key: {key_path}")
         print(f"   Certificate: {cert_path}")
     
+    def sign_csr(self):
+        """Sign a Certificate Signing Request (CSR) and output certificate in PEM format"""
+        if not (self.ca_dir / "ca.crt").exists():
+            print("CA must be created first!")
+            return
+        
+        print("\n=== Sign Certificate Signing Request ===")
+        
+        # Get CSR filename
+        csr_filename = input("Enter CSR filename: ").strip()
+        if not csr_filename:
+            print("CSR filename is required!")
+            return
+        
+        csr_path = Path(csr_filename)
+        if not csr_path.exists():
+            print(f"CSR file '{csr_filename}' not found!")
+            return
+        
+        # Load CA private key and certificate
+        ca_key_path = self.ca_dir / "private" / "ca.key"
+        ca_cert_path = self.ca_dir / "ca.crt"
+        
+        try:
+            with open(ca_key_path, 'rb') as f:
+                ca_private_key = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+            
+            with open(ca_cert_path, 'rb') as f:
+                ca_cert = x509.load_pem_x509_certificate(f.read(), default_backend())
+        except Exception as e:
+            print(f"Error loading CA files: {e}")
+            return
+        
+        # Load and parse CSR
+        try:
+            with open(csr_path, 'rb') as f:
+                csr_data = f.read()
+            
+            # Try to load as PEM first
+            try:
+                csr = x509.load_pem_x509_csr(csr_data, default_backend())
+            except ValueError:
+                # Try to load as DER
+                try:
+                    csr = x509.load_der_x509_csr(csr_data, default_backend())
+                except ValueError:
+                    print("Error: Invalid CSR format. File must be in PEM or DER format.")
+                    return
+            
+            print(f"✅ CSR loaded successfully")
+            print(f"   Subject: {csr.subject}")
+            
+        except Exception as e:
+            print(f"Error loading CSR: {e}")
+            return
+        
+        # Get validity period
+        while True:
+            try:
+                validity_years = input("Validity Period (years) [5]: ").strip() or "5"
+                validity_years = int(validity_years)
+                if validity_years < 1 or validity_years > 20:
+                    print("Validity must be between 1 and 20 years")
+                    continue
+                break
+            except ValueError:
+                print("Please enter a valid number")
+        
+        # Create certificate
+        print("Signing certificate...")
+        try:
+            cert = x509.CertificateBuilder().subject_name(
+                csr.subject
+            ).issuer_name(
+                ca_cert.subject
+            ).public_key(
+                csr.public_key()
+            ).serial_number(
+                x509.random_serial_number()
+            ).not_valid_before(
+                datetime.utcnow()
+            ).not_valid_after(
+                datetime.utcnow() + timedelta(days=365*validity_years)
+            ).add_extension(
+                x509.BasicConstraints(ca=False, path_length=None),
+                critical=True,
+            ).add_extension(
+                x509.KeyUsage(
+                    digital_signature=True,
+                    key_encipherment=True,
+                    key_cert_sign=False,
+                    crl_sign=False,
+                    content_commitment=False,
+                    data_encipherment=False,
+                    key_agreement=False,
+                    encipher_only=False,
+                    decipher_only=False
+                ),
+                critical=True,
+            ).add_extension(
+                x509.SubjectKeyIdentifier.from_public_key(csr.public_key()),
+                critical=False,
+            ).add_extension(
+                x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_private_key.public_key()),
+                critical=False,
+            ).sign(ca_private_key, hashes.SHA256(), default_backend())
+            
+            # Output certificate in PEM format
+            cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+            print("\n" + "="*60)
+            print("SIGNED CERTIFICATE (PEM FORMAT)")
+            print("="*60)
+            print(cert_pem.decode('utf-8'))
+            print("="*60)
+            
+            # Ask if user wants to save to file
+            save_to_file = input("\nSave certificate to file? (y/n) [n]: ").strip().lower()
+            if save_to_file in ['y', 'yes']:
+                default_filename = f"{csr_path.stem}_signed.crt"
+                output_filename = input(f"Output filename [{default_filename}]: ").strip() or default_filename
+                
+                with open(output_filename, "wb") as f:
+                    f.write(cert_pem)
+                
+                print(f"✅ Certificate saved to: {output_filename}")
+            
+        except Exception as e:
+            print(f"Error signing certificate: {e}")
+            return
+    
     def export_p12(self):
         """Export certificate as password-protected P12 file"""
         # Find all certificates
@@ -533,9 +663,10 @@ class CAManager:
         print("1. Create Certificate Authority")
         print("2. Create KME Certificate")
         print("3. Create SAE Certificate")
-        print("4. Export P12 Certificate")
-        print("5. List Certificates")
-        print("6. Reset CA")
+        print("4. Sign CSR")
+        print("5. Export P12 Certificate")
+        print("6. List Certificates")
+        print("7. Reset CA")
         print("q. Exit")
         print("="*50)
     
@@ -555,10 +686,12 @@ class CAManager:
             elif choice == '3':
                 self.create_certificate("SAE")
             elif choice == '4':
-                self.export_p12()
+                self.sign_csr()
             elif choice == '5':
-                self.list_certificates()
+                self.export_p12()
             elif choice == '6':
+                self.list_certificates()
+            elif choice == '7':
                 self.reset_ca()
             else:
                 print("Invalid option. Please try again.")
