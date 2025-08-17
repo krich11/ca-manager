@@ -507,17 +507,33 @@ class CAManager:
                     # Key Usage - preserve from CSR but ensure it's not CA-related
                     # Create a new KeyUsage that preserves the CSR settings but removes CA capabilities
                     csr_key_usage = extension_value
-                    new_key_usage = x509.KeyUsage(
-                        digital_signature=csr_key_usage.digital_signature,
-                        key_encipherment=csr_key_usage.key_encipherment,
-                        key_cert_sign=False,  # Always False for end-entity certs
-                        crl_sign=False,       # Always False for end-entity certs
-                        content_commitment=csr_key_usage.content_commitment,
-                        data_encipherment=csr_key_usage.data_encipherment,
-                        key_agreement=csr_key_usage.key_agreement,
-                        encipher_only=csr_key_usage.encipher_only,
-                        decipher_only=csr_key_usage.decipher_only
-                    )
+                    
+                    # Handle encipher_only and decipher_only based on key_agreement
+                    if csr_key_usage.key_agreement:
+                        new_key_usage = x509.KeyUsage(
+                            digital_signature=csr_key_usage.digital_signature,
+                            key_encipherment=csr_key_usage.key_encipherment,
+                            key_cert_sign=False,  # Always False for end-entity certs
+                            crl_sign=False,       # Always False for end-entity certs
+                            content_commitment=csr_key_usage.content_commitment,
+                            data_encipherment=csr_key_usage.data_encipherment,
+                            key_agreement=csr_key_usage.key_agreement,
+                            encipher_only=csr_key_usage.encipher_only,
+                            decipher_only=csr_key_usage.decipher_only
+                        )
+                    else:
+                        new_key_usage = x509.KeyUsage(
+                            digital_signature=csr_key_usage.digital_signature,
+                            key_encipherment=csr_key_usage.key_encipherment,
+                            key_cert_sign=False,  # Always False for end-entity certs
+                            crl_sign=False,       # Always False for end-entity certs
+                            content_commitment=csr_key_usage.content_commitment,
+                            data_encipherment=csr_key_usage.data_encipherment,
+                            key_agreement=False,
+                            encipher_only=False,
+                            decipher_only=False
+                        )
+                    
                     cert_builder = cert_builder.add_extension(new_key_usage, critical=is_critical)
                     extensions_added.add(extension_oid)
                     print(f"     Added Key Usage (modified): {new_key_usage}")
