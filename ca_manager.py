@@ -640,9 +640,27 @@ class CAManager:
             print(cert_pem.decode('utf-8'))
             print("="*60)
             
-            # Ask if user wants to save to file
-            save_to_file = input("\nSave certificate to file? (y/n) [n]: ").strip().lower()
-            if save_to_file in ['y', 'yes']:
+            # Always save CSR-signed certificate to csr subdirectory
+            csr_dir = self.certs_dir / "csr"
+            csr_dir.mkdir(exist_ok=True)
+            
+            # Generate filename based on CSR name and serial number
+            serial_hex = f"{cert.serial_number:02X}"
+            cert_filename = f"{csr_path.stem}_{serial_hex}.crt"
+            cert_path = csr_dir / cert_filename
+            
+            # Save certificate to csr directory
+            with open(cert_path, "wb") as f:
+                f.write(cert_pem)
+            
+            # Set permissions
+            os.chmod(cert_path, 0o644)
+            
+            print(f"✅ Certificate saved to: {cert_path}")
+            
+            # Ask if user wants to save to additional location
+            save_additional = input("\nSave certificate to additional location? (y/n) [n]: ").strip().lower()
+            if save_additional in ['y', 'yes']:
                 default_filename = f"{csr_path.stem}_signed.crt"
                 output_filename = self.smart_input(f"Output filename [{default_filename}]: ") or default_filename
                 
@@ -652,7 +670,7 @@ class CAManager:
                 with open(output_filename_expanded, "wb") as f:
                     f.write(cert_pem)
                 
-                print(f"✅ Certificate saved to: {output_filename_expanded}")
+                print(f"✅ Certificate also saved to: {output_filename_expanded}")
             
         except Exception as e:
             print(f"Error signing certificate: {e}")
@@ -769,6 +787,14 @@ class CAManager:
         if sae_dir.exists() and list(sae_dir.glob("*.crt")):
             print("SAE Certificates:")
             for cert_file in sae_dir.glob("*.crt"):
+                print(f"  {cert_file.stem}")
+            print()
+        
+        # Check CSR-signed certificates
+        csr_dir = self.certs_dir / "csr"
+        if csr_dir.exists() and list(csr_dir.glob("*.crt")):
+            print("CSR-Signed Certificates:")
+            for cert_file in csr_dir.glob("*.crt"):
                 print(f"  {cert_file.stem}")
             print()
         
@@ -936,6 +962,121 @@ class CAManager:
         
         return "/".join(dn_parts)
     
+    def view_certificate_by_serial(self):
+        """View certificate details by serial number"""
+        print("\n=== View Certificate by Serial Number ===")
+        
+        # Get serial number from user
+        serial_input = input("Enter certificate serial number (hex): ").strip()
+        if not serial_input:
+            print("Serial number is required!")
+            return
+        
+        # Normalize serial number format
+        try:
+            # Convert to uppercase hex
+            serial_hex = serial_input.upper()
+            # Remove 0x prefix if present
+            if serial_hex.startswith('0X'):
+                serial_hex = serial_hex[2:]
+        except Exception:
+            print("Invalid serial number format!")
+            return
+        
+        # Search in CA database
+        index_path = self.ca_dir / "index.txt"
+        if not index_path.exists():
+            print("CA database not found!")
+            return
+        
+        try:
+            with open(index_path, 'r') as f:
+                lines = f.readlines()
+            
+            # Find certificate with matching serial number
+            cert_found = False
+            for line in lines:
+                parts = line.strip().split('\t')
+                if len(parts) >= 6:
+                    status = parts[0]
+                    expiration_date = parts[1]
+                    revocation_date = parts[2]
+                    db_serial = parts[3]
+                    filename = parts[4]
+                    subject_dn = parts[5]
+                    
+                    if db_serial.upper() == serial_hex:
+                        cert_found = True
+                        print(f"\nCertificate Found:")
+                        print(f"  Serial Number: {db_serial}")
+                        print(f"  Status: {status}")
+                        print(f"  Expiration: {expiration_date}")
+                        if revocation_date:
+                            print(f"  Revocation: {revocation_date}")
+                        print(f"  Filename: {filename}")
+                        print(f"  Subject: {subject_dn}")
+                        
+                        # Try to find and display the actual certificate file
+                        cert_file_found = False
+                        
+                        # Search in KME directory
+                        kme_dir = self.certs_dir / "kme"
+                        if kme_dir.exists():
+                            for cert_file in kme_dir.glob("*.crt"):
+                                try:
+                                    with open(cert_file, 'rb') as f:
+                                        cert_data = f.read()
+                                    cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                                    if f"{cert.serial_number:02X}" == serial_hex:
+                                        print(f"\n  Certificate File: {cert_file}")
+                                        cert_file_found = True
+                                        break
+                                except Exception:
+                                    continue
+                        
+                        # Search in SAE directory
+                        if not cert_file_found:
+                            sae_dir = self.certs_dir / "sae"
+                            if sae_dir.exists():
+                                for cert_file in sae_dir.glob("*.crt"):
+                                    try:
+                                        with open(cert_file, 'rb') as f:
+                                            cert_data = f.read()
+                                        cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                                        if f"{cert.serial_number:02X}" == serial_hex:
+                                            print(f"\n  Certificate File: {cert_file}")
+                                            cert_file_found = True
+                                            break
+                                    except Exception:
+                                        continue
+                        
+                        # Search in CSR directory
+                        if not cert_file_found:
+                            csr_dir = self.certs_dir / "csr"
+                            if csr_dir.exists():
+                                for cert_file in csr_dir.glob("*.crt"):
+                                    try:
+                                        with open(cert_file, 'rb') as f:
+                                            cert_data = f.read()
+                                        cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                                        if f"{cert.serial_number:02X}" == serial_hex:
+                                            print(f"\n  Certificate File: {cert_file}")
+                                            cert_file_found = True
+                                            break
+                                    except Exception:
+                                        continue
+                        
+                        if not cert_file_found:
+                            print(f"\n  Certificate file not found locally")
+                        
+                        break
+            
+            if not cert_found:
+                print(f"Certificate with serial number {serial_hex} not found in CA database!")
+                
+        except Exception as e:
+            print(f"Error reading CA database: {e}")
+    
     def show_menu(self):
         """Show main menu"""
         print("\n" + "="*50)
@@ -947,7 +1088,8 @@ class CAManager:
         print("4. Sign CSR")
         print("5. Export P12 Certificate")
         print("6. List Certificates")
-        print("7. Reset CA")
+        print("7. View Certificate by Serial")
+        print("8. Reset CA")
         print("q. Exit")
         print("="*50)
     
@@ -973,6 +1115,8 @@ class CAManager:
             elif choice == '6':
                 self.list_certificates()
             elif choice == '7':
+                self.view_certificate_by_serial()
+            elif choice == '8':
                 self.reset_ca()
             else:
                 print("Invalid option. Please try again.")
