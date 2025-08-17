@@ -27,8 +27,10 @@ class CAManager:
         
         # Enable tab completion for filenames
         try:
+            # Set up custom filename completer
+            readline.set_completer(self.filename_completer)
             readline.parse_and_bind("tab: complete")
-            # Set up filename completion
+            # Set up filename completion delimiters
             readline.set_completer_delims(' \t\n`!@#$%^&*()=+[{]}\\|;:\'",<>?')
         except Exception:
             # Tab completion not available, continue without it
@@ -786,6 +788,52 @@ class CAManager:
             shutil.rmtree(self.certs_dir)
         
         print("✅ CA and all certificates reset.")
+    
+    def filename_completer(self, text, state):
+        """Custom filename completer for tab completion"""
+        if state == 0:
+            # This is the first time for this text, so build a match list.
+            import glob
+            import os
+            
+            # Expand shell shortcuts
+            if text.startswith('~'):
+                text = os.path.expanduser(text)
+            elif '$' in text:
+                text = os.path.expandvars(text)
+            
+            # Get the directory and filename parts
+            if os.path.isdir(text):
+                # If text is a directory, list its contents
+                directory = text
+                pattern = '*'
+            else:
+                # Split into directory and filename pattern
+                directory = os.path.dirname(text) or '.'
+                pattern = os.path.basename(text) + '*'
+            
+            # Get the full path for the directory
+            if not os.path.isabs(directory):
+                directory = os.path.abspath(directory)
+            
+            # Find matching files
+            try:
+                matches = []
+                for filename in os.listdir(directory):
+                    if filename.startswith(pattern.replace('*', '')):
+                        full_path = os.path.join(directory, filename)
+                        if os.path.isdir(full_path):
+                            matches.append(filename + '/')
+                        else:
+                            matches.append(filename)
+                self.matches = matches
+            except (OSError, PermissionError):
+                self.matches = []
+        
+        try:
+            return self.matches[state]
+        except IndexError:
+            return None
     
     def get_next_serial_number(self):
         """Get the next available serial number"""
