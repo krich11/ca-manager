@@ -924,9 +924,46 @@ class CAManager:
             
             input("\nPress Enter to continue...")
 
+def check_requirements():
+    """Check if all required packages are installed"""
+    missing_packages = []
+    
+    # Check cryptography
+    try:
+        import cryptography
+    except ImportError:
+        missing_packages.append("cryptography")
+    
+    # Check prompt_toolkit
+    try:
+        import prompt_toolkit
+    except ImportError:
+        missing_packages.append("prompt_toolkit")
+    
+    if missing_packages:
+        print("\n" + "="*60)
+        print("❌ MISSING REQUIRED PACKAGES")
+        print("="*60)
+        print("The following packages are required but not installed:")
+        for package in missing_packages:
+            print(f"  - {package}")
+        print("\nTo install all required packages, run:")
+        print("  pip install -r requirements.txt")
+        print("\nOr install individually:")
+        for package in missing_packages:
+            print(f"  pip install {package}")
+        print("="*60)
+        return False
+    
+    return True
+
 def main():
     """Main function"""
     try:
+        # Check requirements first
+        if not check_requirements():
+            sys.exit(1)
+        
         ca_manager = CAManager()
         ca_manager.run()
     except KeyboardInterrupt:
