@@ -407,9 +407,11 @@ class CAManager:
             print("CSR filename is required!")
             return
         
-        csr_path = Path(csr_filename)
+        # Expand shell shortcuts like ~ for home directory
+        csr_filename_expanded = os.path.expanduser(os.path.expandvars(csr_filename))
+        csr_path = Path(csr_filename_expanded)
         if not csr_path.exists():
-            print(f"CSR file '{csr_filename}' not found!")
+            print(f"CSR file '{csr_filename_expanded}' not found!")
             return
         
         # Load CA private key and certificate
@@ -621,10 +623,13 @@ class CAManager:
                 default_filename = f"{csr_path.stem}_signed.crt"
                 output_filename = input(f"Output filename [{default_filename}]: ").strip() or default_filename
                 
-                with open(output_filename, "wb") as f:
+                # Expand shell shortcuts like ~ for home directory
+                output_filename_expanded = os.path.expanduser(os.path.expandvars(output_filename))
+                
+                with open(output_filename_expanded, "wb") as f:
                     f.write(cert_pem)
                 
-                print(f"✅ Certificate saved to: {output_filename}")
+                print(f"✅ Certificate saved to: {output_filename_expanded}")
             
         except Exception as e:
             print(f"Error signing certificate: {e}")
@@ -688,6 +693,9 @@ class CAManager:
         default_filename = f"{cert_data['name']}.p12"
         filename = input(f"Export filename [{default_filename}]: ").strip() or default_filename
         
+        # Expand shell shortcuts like ~ for home directory
+        filename_expanded = os.path.expanduser(os.path.expandvars(filename))
+        
         # Get password
         password = getpass.getpass("Enter P12 password: ")
         if not password:
@@ -700,12 +708,12 @@ class CAManager:
                 'openssl', 'pkcs12', '-export',
                 '-in', cert_data['cert_path'],
                 '-inkey', cert_data['key_path'],
-                '-out', filename,
+                '-out', filename_expanded,
                 '-passout', f'pass:{password}'
             ]
             
             subprocess.run(cmd, check=True, capture_output=True)
-            print(f"✅ P12 file exported: {filename}")
+            print(f"✅ P12 file exported: {filename_expanded}")
             
         except subprocess.CalledProcessError as e:
             print(f"Error exporting P12: {e}")
