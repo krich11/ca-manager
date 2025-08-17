@@ -1028,12 +1028,49 @@ class CAManager:
                     
                     if db_serial.upper() == serial_hex:
                         cert_found = True
+                        
+                        # Convert status to readable format
+                        status_text = "Valid" if status == "V" else "Revoked" if status == "R" else "Expired" if status == "E" else f"Unknown ({status})"
+                        
+                        # Convert expiration date to readable format
+                        try:
+                            # Parse OpenSSL date format (YYMMDDHHMMSSZ)
+                            if len(expiration_date) == 13 and expiration_date.endswith('Z'):
+                                year = "20" + expiration_date[0:2]
+                                month = expiration_date[2:4]
+                                day = expiration_date[4:6]
+                                hour = expiration_date[6:8]
+                                minute = expiration_date[8:10]
+                                second = expiration_date[10:12]
+                                formatted_expiration = f"{year}-{month}-{day} {hour}:{minute}:{second} UTC"
+                            else:
+                                formatted_expiration = expiration_date
+                        except Exception:
+                            formatted_expiration = expiration_date
+                        
+                        # Convert revocation date if present
+                        formatted_revocation = ""
+                        if revocation_date:
+                            try:
+                                if len(revocation_date) == 13 and revocation_date.endswith('Z'):
+                                    year = "20" + revocation_date[0:2]
+                                    month = revocation_date[2:4]
+                                    day = revocation_date[4:6]
+                                    hour = revocation_date[6:8]
+                                    minute = revocation_date[8:10]
+                                    second = revocation_date[10:12]
+                                    formatted_revocation = f"{year}-{month}-{day} {hour}:{minute}:{second} UTC"
+                                else:
+                                    formatted_revocation = revocation_date
+                            except Exception:
+                                formatted_revocation = revocation_date
+                        
                         print(f"\nCertificate Found:")
                         print(f"  Serial Number: {db_serial}")
-                        print(f"  Status: {status}")
-                        print(f"  Expiration: {expiration_date}")
-                        if revocation_date:
-                            print(f"  Revocation: {revocation_date}")
+                        print(f"  Status: {status_text}")
+                        print(f"  Expiration: {formatted_expiration}")
+                        if formatted_revocation:
+                            print(f"  Revocation: {formatted_revocation}")
                         print(f"  Filename: {filename}")
                         print(f"  Subject: {subject_dn}")
                         
@@ -1089,6 +1126,56 @@ class CAManager:
                         
                         if not cert_file_found:
                             print(f"\n  Certificate file not found locally")
+                        else:
+                            # Display EKU information from the certificate file
+                            try:
+                                with open(cert_file, 'rb') as f:
+                                    cert_data = f.read()
+                                cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                                
+                                # Extract Extended Key Usage
+                                eku_info = []
+                                for extension in cert.extensions:
+                                    if extension.oid == x509.oid.ExtensionOID.EXTENDED_KEY_USAGE:
+                                        for usage in extension.value:
+                                            if usage == x509.oid.ExtendedKeyUsageOID.SERVER_AUTH:
+                                                eku_info.append("Server Authentication")
+                                            elif usage == x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH:
+                                                eku_info.append("Client Authentication")
+                                            elif usage == x509.oid.ExtendedKeyUsageOID.CODE_SIGNING:
+                                                eku_info.append("Code Signing")
+                                            elif usage == x509.oid.ExtendedKeyUsageOID.EMAIL_PROTECTION:
+                                                eku_info.append("Email Protection")
+                                            elif usage == x509.oid.ExtendedKeyUsageOID.TIME_STAMPING:
+                                                eku_info.append("Time Stamping")
+                                            else:
+                                                eku_info.append(str(usage))
+                                
+                                if eku_info:
+                                    print(f"  Extended Key Usage: {', '.join(eku_info)}")
+                                else:
+                                    print(f"  Extended Key Usage: None specified")
+                                
+                                # Extract Subject Alternative Names
+                                san_info = []
+                                for extension in cert.extensions:
+                                    if extension.oid == x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
+                                        san = extension.value
+                                        for name in san:
+                                            if isinstance(name, x509.DNSName):
+                                                san_info.append(f"DNS:{name.value}")
+                                            elif isinstance(name, x509.IPAddress):
+                                                san_info.append(f"IP:{name.value}")
+                                            elif isinstance(name, x509.RFC822Name):
+                                                san_info.append(f"Email:{name.value}")
+                                            else:
+                                                san_info.append(str(name))
+                                
+                                if san_info:
+                                    print(f"  Subject Alternative Names: {', '.join(san_info)}")
+                                
+                            except Exception as e:
+                                print(f"  Could not read certificate details: {e}")
                         
                         break
             
