@@ -8,8 +8,6 @@ import os
 import sys
 import shutil
 import subprocess
-import readline
-import rlcompleter
 from datetime import datetime, timedelta
 from pathlib import Path
 from cryptography import x509
@@ -20,21 +18,24 @@ from cryptography.hazmat.backends import default_backend
 import getpass
 import tempfile
 
+# Import prompt_toolkit for tab completion
+try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.completion import PathCompleter
+    PROMPT_TOOLKIT_AVAILABLE = True
+except ImportError:
+    PROMPT_TOOLKIT_AVAILABLE = False
+
 class CAManager:
     def __init__(self):
         self.ca_dir = Path("ca")
         self.certs_dir = Path("certs")
         
-        # Enable tab completion for filenames
-        try:
-            # Set up custom filename completer
-            readline.set_completer(self.filename_completer)
-            readline.parse_and_bind("tab: complete")
-            # Set up filename completion delimiters
-            readline.set_completer_delims(' \t\n`!@#$%^&*()=+[{]}\\|;:\'",<>?')
-        except Exception:
-            # Tab completion not available, continue without it
-            pass
+        # Initialize prompt_toolkit session for tab completion
+        if PROMPT_TOOLKIT_AVAILABLE:
+            self.session = PromptSession(completer=PathCompleter())
+        else:
+            self.session = None
     
     def create_directories(self):
         """Create necessary directories"""
@@ -418,7 +419,7 @@ class CAManager:
         print("\n=== Sign Certificate Signing Request ===")
         
         # Get CSR filename
-        csr_filename = input("Enter CSR filename: ").strip()
+        csr_filename = self.smart_input("Enter CSR filename: ")
         if not csr_filename:
             print("CSR filename is required!")
             return
@@ -640,7 +641,7 @@ class CAManager:
             save_to_file = input("\nSave certificate to file? (y/n) [n]: ").strip().lower()
             if save_to_file in ['y', 'yes']:
                 default_filename = f"{csr_path.stem}_signed.crt"
-                output_filename = input(f"Output filename [{default_filename}]: ").strip() or default_filename
+                output_filename = self.smart_input(f"Output filename [{default_filename}]: ") or default_filename
                 
                 # Expand shell shortcuts like ~ for home directory
                 output_filename_expanded = os.path.expanduser(os.path.expandvars(output_filename))
@@ -710,7 +711,7 @@ class CAManager:
         
         # Get export filename
         default_filename = f"{cert_data['name']}.p12"
-        filename = input(f"Export filename [{default_filename}]: ").strip() or default_filename
+        filename = self.smart_input(f"Export filename [{default_filename}]: ") or default_filename
         
         # Expand shell shortcuts like ~ for home directory
         filename_expanded = os.path.expanduser(os.path.expandvars(filename))
@@ -789,51 +790,12 @@ class CAManager:
         
         print("✅ CA and all certificates reset.")
     
-    def filename_completer(self, text, state):
-        """Custom filename completer for tab completion"""
-        if state == 0:
-            # This is the first time for this text, so build a match list.
-            import glob
-            import os
-            
-            # Expand shell shortcuts
-            if text.startswith('~'):
-                text = os.path.expanduser(text)
-            elif '$' in text:
-                text = os.path.expandvars(text)
-            
-            # Get the directory and filename parts
-            if os.path.isdir(text):
-                # If text is a directory, list its contents
-                directory = text
-                pattern = '*'
-            else:
-                # Split into directory and filename pattern
-                directory = os.path.dirname(text) or '.'
-                pattern = os.path.basename(text) + '*'
-            
-            # Get the full path for the directory
-            if not os.path.isabs(directory):
-                directory = os.path.abspath(directory)
-            
-            # Find matching files
-            try:
-                matches = []
-                for filename in os.listdir(directory):
-                    if filename.startswith(pattern.replace('*', '')):
-                        full_path = os.path.join(directory, filename)
-                        if os.path.isdir(full_path):
-                            matches.append(filename + '/')
-                        else:
-                            matches.append(filename)
-                self.matches = matches
-            except (OSError, PermissionError):
-                self.matches = []
-        
-        try:
-            return self.matches[state]
-        except IndexError:
-            return None
+    def smart_input(self, prompt):
+        """Smart input with tab completion if available"""
+        if self.session:
+            return self.session.prompt(prompt).strip()
+        else:
+            return input(prompt).strip()
     
     def get_next_serial_number(self):
         """Get the next available serial number"""
