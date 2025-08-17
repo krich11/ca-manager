@@ -1085,7 +1085,7 @@ class CAManager:
                                         cert_data = f.read()
                                     cert = x509.load_pem_x509_certificate(cert_data, default_backend())
                                     if f"{cert.serial_number:02X}" == serial_hex:
-                                        print(f"\n  Certificate File: {cert_file}")
+                                        #print(f"\n  Certificate File: {cert_file}")
                                         cert_file_found = True
                                         break
                                 except Exception:
@@ -1101,7 +1101,7 @@ class CAManager:
                                             cert_data = f.read()
                                         cert = x509.load_pem_x509_certificate(cert_data, default_backend())
                                         if f"{cert.serial_number:02X}" == serial_hex:
-                                            print(f"\n  Certificate File: {cert_file}")
+                                            #print(f"\n  Certificate File: {cert_file}")
                                             cert_file_found = True
                                             break
                                     except Exception:
@@ -1117,7 +1117,7 @@ class CAManager:
                                             cert_data = f.read()
                                         cert = x509.load_pem_x509_certificate(cert_data, default_backend())
                                         if f"{cert.serial_number:02X}" == serial_hex:
-                                            print(f"\n  Certificate File: {cert_file}")
+                                            #print(f"\n  Certificate File: {cert_file}")
                                             cert_file_found = True
                                             break
                                     except Exception:
