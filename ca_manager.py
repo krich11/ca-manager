@@ -396,6 +396,9 @@ class CAManager:
         with open(cert_path, "wb") as f:
             f.write(cert.public_bytes(serialization.Encoding.PEM))
         
+        # Update CA database
+        self.update_ca_database(cert, cert_info['common_name'].lower(), cert_type)
+        
         # Set permissions
         os.chmod(key_path, 0o600)
         os.chmod(cert_path, 0o644)
@@ -620,6 +623,9 @@ class CAManager:
             # Sign the certificate
             cert = cert_builder.sign(ca_private_key, hashes.SHA256(), default_backend())
             
+            # Update CA database
+            self.update_ca_database(cert, csr_path.stem, "CSR")
+            
             # Output certificate in PEM format
             cert_pem = cert.public_bytes(serialization.Encoding.PEM)
             print("\n" + "="*60)
@@ -780,6 +786,90 @@ class CAManager:
             shutil.rmtree(self.certs_dir)
         
         print("✅ CA and all certificates reset.")
+    
+    def get_next_serial_number(self):
+        """Get the next available serial number"""
+        serial_path = self.ca_dir / "serial"
+        if not serial_path.exists():
+            return "01"
+        
+        try:
+            with open(serial_path, "r") as f:
+                current_serial = f.read().strip()
+            
+            # Convert to integer, increment, and format as hex
+            next_serial = int(current_serial, 16) + 1
+            return f"{next_serial:02X}"
+        except Exception:
+            return "01"
+    
+    def update_serial_number(self, serial_number):
+        """Update the serial number file"""
+        serial_path = self.ca_dir / "serial"
+        with open(serial_path, "w") as f:
+            f.write(serial_number)
+    
+    def update_ca_database(self, cert, cert_name, cert_type):
+        """Update the CA database with certificate information"""
+        try:
+            # Get serial number
+            serial_number = self.get_next_serial_number()
+            
+            # Format: Status,ExpirationDate,RevocationDate,SerialNumber,FileName,SubjectDN
+            # Status: V=Valid, R=Revoked, E=Expired
+            status = "V"  # Valid
+            
+            # Get expiration date
+            expiration_date = cert.not_valid_after.strftime("%y%m%d%H%M%SZ")
+            
+            # Revocation date (empty for valid certificates)
+            revocation_date = ""
+            
+            # Serial number (hex format)
+            serial_hex = f"{cert.serial_number:02X}"
+            
+            # File name (for CSR-signed certs, we don't have a local file)
+            filename = f"{cert_type}_{cert_name}.crt"
+            
+            # Subject DN
+            subject_dn = self.format_dn(cert.subject)
+            
+            # Create database entry
+            db_entry = f"{status}\t{expiration_date}\t{revocation_date}\t{serial_hex}\t{filename}\t{subject_dn}\n"
+            
+            # Append to index.txt
+            index_path = self.ca_dir / "index.txt"
+            with open(index_path, "a") as f:
+                f.write(db_entry)
+            
+            # Update serial number
+            self.update_serial_number(serial_number)
+            
+            print(f"   Certificate recorded in CA database (Serial: {serial_hex})")
+            
+        except Exception as e:
+            print(f"Warning: Could not update CA database: {e}")
+    
+    def format_dn(self, name):
+        """Format Distinguished Name for database entry"""
+        dn_parts = []
+        for attr in name:
+            if attr.oid == NameOID.COUNTRY_NAME:
+                dn_parts.append(f"C={attr.value}")
+            elif attr.oid == NameOID.STATE_OR_PROVINCE_NAME:
+                dn_parts.append(f"ST={attr.value}")
+            elif attr.oid == NameOID.LOCALITY_NAME:
+                dn_parts.append(f"L={attr.value}")
+            elif attr.oid == NameOID.ORGANIZATION_NAME:
+                dn_parts.append(f"O={attr.value}")
+            elif attr.oid == NameOID.ORGANIZATIONAL_UNIT_NAME:
+                dn_parts.append(f"OU={attr.value}")
+            elif attr.oid == NameOID.COMMON_NAME:
+                dn_parts.append(f"CN={attr.value}")
+            elif attr.oid == NameOID.EMAIL_ADDRESS:
+                dn_parts.append(f"emailAddress={attr.value}")
+        
+        return "/".join(dn_parts)
     
     def show_menu(self):
         """Show main menu"""
