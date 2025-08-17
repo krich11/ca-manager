@@ -33,7 +33,9 @@ class CAManager:
         
         # Initialize prompt_toolkit session for tab completion
         if PROMPT_TOOLKIT_AVAILABLE:
-            self.session = PromptSession(completer=PathCompleter())
+            # Create a path completer that expands user paths
+            completer = PathCompleter(expanduser=True)
+            self.session = PromptSession(completer=completer)
         else:
             self.session = None
     
@@ -793,7 +795,12 @@ class CAManager:
     def smart_input(self, prompt):
         """Smart input with tab completion if available"""
         if self.session:
-            return self.session.prompt(prompt).strip()
+            try:
+                return self.session.prompt(prompt).strip()
+            except Exception as e:
+                # Fallback to regular input if prompt_toolkit fails
+                print(f"Warning: Tab completion failed, using regular input: {e}")
+                return input(prompt).strip()
         else:
             return input(prompt).strip()
     
