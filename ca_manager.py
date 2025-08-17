@@ -464,7 +464,8 @@ class CAManager:
         # Create certificate
         print("Signing certificate...")
         try:
-            cert = x509.CertificateBuilder().subject_name(
+            # Start building the certificate
+            cert_builder = x509.CertificateBuilder().subject_name(
                 csr.subject
             ).issuer_name(
                 ca_cert.subject
@@ -476,29 +477,119 @@ class CAManager:
                 datetime.utcnow()
             ).not_valid_after(
                 datetime.utcnow() + timedelta(days=365*validity_years)
-            ).add_extension(
-                x509.BasicConstraints(ca=False, path_length=None),
-                critical=True,
-            ).add_extension(
-                x509.KeyUsage(
-                    digital_signature=True,
-                    key_encipherment=True,
-                    key_cert_sign=False,
-                    crl_sign=False,
-                    content_commitment=False,
-                    data_encipherment=False,
-                    key_agreement=False,
-                    encipher_only=False,
-                    decipher_only=False
-                ),
-                critical=True,
-            ).add_extension(
-                x509.SubjectKeyIdentifier.from_public_key(csr.public_key()),
-                critical=False,
-            ).add_extension(
+            )
+            
+            # Preserve extensions from CSR
+            extensions_added = set()
+            
+            # Process each extension from the CSR
+            for extension in csr.extensions:
+                extension_oid = extension.oid
+                extension_value = extension.value
+                is_critical = extension.critical
+                
+                print(f"   Processing extension: {extension_oid}")
+                
+                # Handle different extension types
+                if extension_oid == x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
+                    # Subject Alternative Names
+                    cert_builder = cert_builder.add_extension(extension_value, critical=is_critical)
+                    extensions_added.add(extension_oid)
+                    print(f"     Added SAN: {extension_value}")
+                    
+                elif extension_oid == x509.oid.ExtensionOID.EXTENDED_KEY_USAGE:
+                    # Extended Key Usage
+                    cert_builder = cert_builder.add_extension(extension_value, critical=is_critical)
+                    extensions_added.add(extension_oid)
+                    print(f"     Added EKU: {extension_value}")
+                    
+                elif extension_oid == x509.oid.ExtensionOID.KEY_USAGE:
+                    # Key Usage - preserve from CSR but ensure it's not CA-related
+                    # Create a new KeyUsage that preserves the CSR settings but removes CA capabilities
+                    csr_key_usage = extension_value
+                    new_key_usage = x509.KeyUsage(
+                        digital_signature=csr_key_usage.digital_signature,
+                        key_encipherment=csr_key_usage.key_encipherment,
+                        key_cert_sign=False,  # Always False for end-entity certs
+                        crl_sign=False,       # Always False for end-entity certs
+                        content_commitment=csr_key_usage.content_commitment,
+                        data_encipherment=csr_key_usage.data_encipherment,
+                        key_agreement=csr_key_usage.key_agreement,
+                        encipher_only=csr_key_usage.encipher_only,
+                        decipher_only=csr_key_usage.decipher_only
+                    )
+                    cert_builder = cert_builder.add_extension(new_key_usage, critical=is_critical)
+                    extensions_added.add(extension_oid)
+                    print(f"     Added Key Usage (modified): {new_key_usage}")
+                    
+                elif extension_oid == x509.oid.ExtensionOID.BASIC_CONSTRAINTS:
+                    # Basic Constraints - ensure it's not a CA
+                    csr_basic_constraints = extension_value
+                    new_basic_constraints = x509.BasicConstraints(
+                        ca=False,  # Always False for end-entity certs
+                        path_length=None
+                    )
+                    cert_builder = cert_builder.add_extension(new_basic_constraints, critical=True)
+                    extensions_added.add(extension_oid)
+                    print(f"     Added Basic Constraints (modified): {new_basic_constraints}")
+                    
+                elif extension_oid == x509.oid.ExtensionOID.SUBJECT_KEY_IDENTIFIER:
+                    # Subject Key Identifier - preserve from CSR
+                    cert_builder = cert_builder.add_extension(extension_value, critical=is_critical)
+                    extensions_added.add(extension_oid)
+                    print(f"     Added Subject Key Identifier")
+                    
+                elif extension_oid == x509.oid.ExtensionOID.AUTHORITY_KEY_IDENTIFIER:
+                    # Authority Key Identifier - we'll add our own
+                    print(f"     Skipping Authority Key Identifier (will add CA's)")
+                    
+                else:
+                    # For any other extensions, preserve them as-is
+                    cert_builder = cert_builder.add_extension(extension_value, critical=is_critical)
+                    extensions_added.add(extension_oid)
+                    print(f"     Added extension: {extension_oid}")
+            
+            # Add required extensions if not present in CSR
+            if x509.oid.ExtensionOID.BASIC_CONSTRAINTS not in extensions_added:
+                cert_builder = cert_builder.add_extension(
+                    x509.BasicConstraints(ca=False, path_length=None),
+                    critical=True
+                )
+                print("   Added Basic Constraints (default)")
+            
+            if x509.oid.ExtensionOID.KEY_USAGE not in extensions_added:
+                cert_builder = cert_builder.add_extension(
+                    x509.KeyUsage(
+                        digital_signature=True,
+                        key_encipherment=True,
+                        key_cert_sign=False,
+                        crl_sign=False,
+                        content_commitment=False,
+                        data_encipherment=False,
+                        key_agreement=False,
+                        encipher_only=False,
+                        decipher_only=False
+                    ),
+                    critical=True
+                )
+                print("   Added Key Usage (default)")
+            
+            if x509.oid.ExtensionOID.SUBJECT_KEY_IDENTIFIER not in extensions_added:
+                cert_builder = cert_builder.add_extension(
+                    x509.SubjectKeyIdentifier.from_public_key(csr.public_key()),
+                    critical=False
+                )
+                print("   Added Subject Key Identifier (default)")
+            
+            # Always add Authority Key Identifier
+            cert_builder = cert_builder.add_extension(
                 x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_private_key.public_key()),
-                critical=False,
-            ).sign(ca_private_key, hashes.SHA256(), default_backend())
+                critical=False
+            )
+            print("   Added Authority Key Identifier")
+            
+            # Sign the certificate
+            cert = cert_builder.sign(ca_private_key, hashes.SHA256(), default_backend())
             
             # Output certificate in PEM format
             cert_pem = cert.public_bytes(serialization.Encoding.PEM)
