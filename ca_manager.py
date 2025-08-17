@@ -30,6 +30,7 @@ class CAManager:
     def __init__(self):
         self.ca_dir = Path("ca")
         self.certs_dir = Path("certs")
+        self.version = self.get_version()
         
         # Initialize prompt_toolkit session for tab completion
         if PROMPT_TOOLKIT_AVAILABLE:
@@ -792,6 +793,18 @@ class CAManager:
         
         print("✅ CA and all certificates reset.")
     
+    def get_version(self):
+        """Get version from VERSION file"""
+        try:
+            version_file = Path(__file__).parent / "VERSION"
+            if version_file.exists():
+                with open(version_file, 'r') as f:
+                    return f.read().strip()
+            else:
+                return "0.0.0"
+        except Exception:
+            return "0.0.0"
+    
     def smart_input(self, prompt):
         """Smart input with tab completion if available"""
         if self.session:
@@ -891,7 +904,7 @@ class CAManager:
     def show_menu(self):
         """Show main menu"""
         print("\n" + "="*50)
-        print("Easy-KMS CA Manager")
+        print(f"Easy-KMS CA Manager v{self.version}")
         print("="*50)
         print("1. Create Certificate Authority")
         print("2. Create KME Certificate")
