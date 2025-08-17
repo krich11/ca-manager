@@ -8,6 +8,8 @@ import os
 import sys
 import shutil
 import subprocess
+import readline
+import rlcompleter
 from datetime import datetime, timedelta
 from pathlib import Path
 from cryptography import x509
@@ -22,6 +24,15 @@ class CAManager:
     def __init__(self):
         self.ca_dir = Path("ca")
         self.certs_dir = Path("certs")
+        
+        # Enable tab completion for filenames
+        try:
+            readline.parse_and_bind("tab: complete")
+            # Set up filename completion
+            readline.set_completer_delims(' \t\n`!@#$%^&*()=+[{]}\\|;:\'",<>?')
+        except Exception:
+            # Tab completion not available, continue without it
+            pass
     
     def create_directories(self):
         """Create necessary directories"""
