@@ -772,9 +772,44 @@ class CAManager:
                 print(f"  {cert_file.stem}")
             print()
         
+        # Check CA database for all certificates (including CSR-signed)
+        index_path = self.ca_dir / "index.txt"
+        if index_path.exists():
+            try:
+                with open(index_path, 'r') as f:
+                    lines = f.readlines()
+                
+                # Filter for valid certificates (status V)
+                valid_certs = []
+                for line in lines:
+                    parts = line.strip().split('\t')
+                    if len(parts) >= 6 and parts[0] == 'V':  # Valid certificate
+                        filename = parts[4]
+                        subject_dn = parts[5]
+                        
+                        # Skip CA certificate itself
+                        if 'ca.crt' not in filename:
+                            valid_certs.append((filename, subject_dn))
+                
+                if valid_certs:
+                    print("All Signed Certificates (from CA database):")
+                    for filename, subject_dn in valid_certs:
+                        # Extract common name from DN
+                        cn = "Unknown"
+                        if "CN=" in subject_dn:
+                            cn_part = subject_dn.split("CN=")[1]
+                            cn = cn_part.split("/")[0] if "/" in cn_part else cn_part
+                        
+                        print(f"  {filename} - {cn}")
+                    print()
+                    
+            except Exception as e:
+                print(f"Warning: Could not read CA database: {e}")
+        
         if not (ca_cert_path.exists() or 
                 (kme_dir.exists() and list(kme_dir.glob("*.crt"))) or 
-                (sae_dir.exists() and list(sae_dir.glob("*.crt")))):
+                (sae_dir.exists() and list(sae_dir.glob("*.crt"))) or
+                (index_path.exists() and valid_certs)):
             print("No certificates created yet.")
     
     def reset_ca(self):
