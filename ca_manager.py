@@ -779,7 +779,14 @@ class CAManager:
         if kme_dir.exists() and list(kme_dir.glob("*.crt")):
             print("KME Certificates:")
             for cert_file in kme_dir.glob("*.crt"):
-                print(f"  {cert_file.stem}")
+                try:
+                    with open(cert_file, 'rb') as f:
+                        cert_data = f.read()
+                    cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                    serial_hex = f"{cert.serial_number:02X}"
+                    print(f"  {cert_file.stem} (Serial: {serial_hex})")
+                except Exception:
+                    print(f"  {cert_file.stem} (Serial: Unknown)")
             print()
         
         # Check SAE certificates
@@ -787,7 +794,14 @@ class CAManager:
         if sae_dir.exists() and list(sae_dir.glob("*.crt")):
             print("SAE Certificates:")
             for cert_file in sae_dir.glob("*.crt"):
-                print(f"  {cert_file.stem}")
+                try:
+                    with open(cert_file, 'rb') as f:
+                        cert_data = f.read()
+                    cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                    serial_hex = f"{cert.serial_number:02X}"
+                    print(f"  {cert_file.stem} (Serial: {serial_hex})")
+                except Exception:
+                    print(f"  {cert_file.stem} (Serial: Unknown)")
             print()
         
         # Check CSR-signed certificates
@@ -795,7 +809,14 @@ class CAManager:
         if csr_dir.exists() and list(csr_dir.glob("*.crt")):
             print("CSR-Signed Certificates:")
             for cert_file in csr_dir.glob("*.crt"):
-                print(f"  {cert_file.stem}")
+                try:
+                    with open(cert_file, 'rb') as f:
+                        cert_data = f.read()
+                    cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                    serial_hex = f"{cert.serial_number:02X}"
+                    print(f"  {cert_file.stem} (Serial: {serial_hex})")
+                except Exception:
+                    print(f"  {cert_file.stem} (Serial: Unknown)")
             print()
         
         # Check CA database for all certificates (including CSR-signed)
