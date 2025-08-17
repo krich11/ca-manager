@@ -1073,11 +1073,6 @@ class CAManager:
                             print(f"  Revocation: {formatted_revocation}")
                         print(f"  Subject: {subject_dn}")
                         
-                        # Add blank line before file information
-                        print()
-                        
-                        print(f"  Database Filename: {filename}")
-                        
                         # Try to find and display the actual certificate file
                         cert_file_found = False
                         
@@ -1128,19 +1123,65 @@ class CAManager:
                                     except Exception:
                                         continue
                         
-                        if not cert_file_found:
-                            print(f"  Certificate File: Not found locally")
-                        else:
-                            print(f"  Certificate File: {cert_file}")
+                        # Display EKU and SAN information from the certificate file
+                        eku_info = []
+                        san_info = []
+                        
+                        try:
+                            # Try to find the certificate file to read EKU/SAN
+                            cert_file_to_read = None
                             
-                            # Display EKU information from the certificate file
-                            try:
-                                with open(cert_file, 'rb') as f:
+                            # Search in KME directory
+                            kme_dir = self.certs_dir / "kme"
+                            if kme_dir.exists():
+                                for cert_file in kme_dir.glob("*.crt"):
+                                    try:
+                                        with open(cert_file, 'rb') as f:
+                                            cert_data = f.read()
+                                        cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                                        if f"{cert.serial_number:02X}" == serial_hex:
+                                            cert_file_to_read = cert_file
+                                            break
+                                    except Exception:
+                                        continue
+                            
+                            # Search in SAE directory
+                            if not cert_file_to_read:
+                                sae_dir = self.certs_dir / "sae"
+                                if sae_dir.exists():
+                                    for cert_file in sae_dir.glob("*.crt"):
+                                        try:
+                                            with open(cert_file, 'rb') as f:
+                                                cert_data = f.read()
+                                            cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                                            if f"{cert.serial_number:02X}" == serial_hex:
+                                                cert_file_to_read = cert_file
+                                                break
+                                        except Exception:
+                                            continue
+                            
+                            # Search in CSR directory
+                            if not cert_file_to_read:
+                                csr_dir = self.certs_dir / "csr"
+                                if csr_dir.exists():
+                                    for cert_file in csr_dir.glob("*.crt"):
+                                        try:
+                                            with open(cert_file, 'rb') as f:
+                                                cert_data = f.read()
+                                            cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                                            if f"{cert.serial_number:02X}" == serial_hex:
+                                                cert_file_to_read = cert_file
+                                                break
+                                        except Exception:
+                                            continue
+                            
+                            # Read EKU and SAN from the certificate file
+                            if cert_file_to_read:
+                                with open(cert_file_to_read, 'rb') as f:
                                     cert_data = f.read()
                                 cert = x509.load_pem_x509_certificate(cert_data, default_backend())
                                 
                                 # Extract Extended Key Usage
-                                eku_info = []
                                 for extension in cert.extensions:
                                     if extension.oid == x509.oid.ExtensionOID.EXTENDED_KEY_USAGE:
                                         for usage in extension.value:
@@ -1157,13 +1198,7 @@ class CAManager:
                                             else:
                                                 eku_info.append(str(usage))
                                 
-                                if eku_info:
-                                    print(f"  Extended Key Usage: {', '.join(eku_info)}")
-                                else:
-                                    print(f"  Extended Key Usage: None specified")
-                                
                                 # Extract Subject Alternative Names
-                                san_info = []
                                 for extension in cert.extensions:
                                     if extension.oid == x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
                                         san = extension.value
@@ -1177,11 +1212,30 @@ class CAManager:
                                             else:
                                                 san_info.append(str(name))
                                 
-                                if san_info:
-                                    print(f"  Subject Alternative Names: {', '.join(san_info)}")
-                                
-                            except Exception as e:
-                                print(f"  Could not read certificate details: {e}")
+                        except Exception as e:
+                            pass  # Silently continue if we can't read the certificate
+                        
+                        # Display EKU and SAN information
+                        if eku_info:
+                            print(f"  Extended Key Usage: {', '.join(eku_info)}")
+                        else:
+                            print(f"  Extended Key Usage: None specified")
+                        
+                        if san_info:
+                            print(f"  Subject Alternative Names: {', '.join(san_info)}")
+                        
+                        # Add blank line before file information
+                        print()
+                        
+                        print(f"  Database Filename: {filename}")
+                        
+                        if not cert_file_found:
+                            print(f"  Certificate File: Not found locally")
+                        else:
+                            print(f"  Certificate File: {cert_file}")
+                        
+                        # Add blank line at the end
+                        print()
                         
                         break
             
