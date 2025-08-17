@@ -1071,8 +1071,12 @@ class CAManager:
                         print(f"  Expiration: {formatted_expiration}")
                         if formatted_revocation:
                             print(f"  Revocation: {formatted_revocation}")
-                        print(f"  Filename: {filename}")
                         print(f"  Subject: {subject_dn}")
+                        
+                        # Add blank line before file information
+                        print()
+                        
+                        print(f"  Database Filename: {filename}")
                         
                         # Try to find and display the actual certificate file
                         cert_file_found = False
@@ -1125,8 +1129,10 @@ class CAManager:
                                         continue
                         
                         if not cert_file_found:
-                            print(f"\n  Certificate file not found locally")
+                            print(f"  Certificate File: Not found locally")
                         else:
+                            print(f"  Certificate File: {cert_file}")
+                            
                             # Display EKU information from the certificate file
                             try:
                                 with open(cert_file, 'rb') as f:
